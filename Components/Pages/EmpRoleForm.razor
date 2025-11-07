@@ -1,0 +1,259 @@
+@inject DialogService DialogService
+@inject EmpRoleApiController EmpRoleApi
+@inject NotificationService NotificationService
+@inject NavigationManager NavigationManager
+
+<RadzenStack Orientation="Orientation.Horizontal" Gap="1rem" Style="min-height: 400px;">
+    @* Left Panel - Main Form *@
+    <RadzenStack Style="flex: 1; min-width: 350px;" JustifyContent="JustifyContent.SpaceBetween">
+        <RadzenStack>
+            <GenericDropDown TItem="Employee" TValue="string"
+                             Label="Employee"
+                             Data="@employees"
+                             @bind-Value="@selectedEmployeeId"
+                             TextProperty="empName"
+                             ValueProperty="empId"
+                             Placeholder="Select Employee"
+                             ShowCreateButton="true" />
+
+            <GenericDropDown TItem="Role" TValue="int?"
+                             Label="Role"
+                             Data="@roles"
+                             @bind-Value="@selectedRoleId"
+                             TextProperty="roleName"
+                             ValueProperty="roleId"
+                             Placeholder="Select Role"
+                             ShowCreateButton="true" />
+
+            @* API Storage Selection *@
+            <GenericDropDown TItem="APIStorage"
+                             TValue="int?"
+                             Label="System"
+                             Data="@apiStorages"
+                             @bind-Value="@selectedAPIStorage"
+                             TextProperty="applicationName"
+                             ValueProperty="id"
+                             ShowCreateButton="@(apiStorages.Count == 0)"
+                             OnCreateClick="@ShowAPIStorageForm"
+                             OnNavigateClick="@NavigateToAPIStorage" />
+
+        </RadzenStack>
+        <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.End" Gap="0.5rem" Style="margin-top: 1rem;">
+            <RadzenButton Text="Cancel" Variant="Variant.Text" Click="@(() => DialogService.Close(false))" />
+            <RadzenButton Text="@(string.IsNullOrEmpty(empRole.empId) && empRole.roleId == 0 ? "Create" : "Update")"
+                          Variant="Variant.Flat"
+                          Click="@OnSave"
+                          ButtonStyle="@(string.IsNullOrEmpty(empRole.empId) && empRole.roleId == 0 ? ButtonStyle.Success : ButtonStyle.Primary)" />
+        </RadzenStack>
+    </RadzenStack>
+
+    @* Divider - Only show when a form is active *@
+    @if (showRoleForm || showAPIStorageForm)
+    {
+        <div style="width: 2px; background: linear-gradient(to bottom, #ccc 90%, #ccc 10%, #ccc 10%, #ccc 90%); align-self: stretch;"></div>
+    }
+
+    @* Right Panel - Create Forms *@
+    @if (showRoleForm || showAPIStorageForm)
+    {
+        <RadzenStack Style="flex: 1; min-width: 350px;">
+            @if (showRoleForm)
+            {
+                <RoleForm CloseAfter=false
+                          Role="@newRole"
+                          OnRoleSaved="@OnRoleCreated" />
+            }
+
+            @if (showAPIStorageForm)
+            {
+                <APIStorageForm CloseAfter=false
+                                APIStorage="@newAPIStorage"
+                                OnAPIStorageSaved="@OnAPIStorageCreated" />
+            }
+        </RadzenStack>
+    }
+</RadzenStack>
+
+@code {
+    [Parameter] public bool CloseAfter { get; set; } = true;
+    [Parameter] public EmpRole EmpRole { get; set; } = new EmpRole { empId = "", roleId = 0, systemId = 0 };
+    [Parameter] public EmployeeApiController? EmployeeApi { get; set; }
+    [Parameter] public RoleApiController? RoleApi { get; set; }
+    [Parameter] public APIStorageApiController? APIStorageApi { get; set; }
+    [Parameter] public EventCallback<EmpRole> OnEmpRoleSaved { get; set; }
+
+    private EmpRole empRole = new EmpRole { empId = "", roleId = 0, systemId = 0 };
+    private List<Employee> employees = new List<Employee>();
+    private List<APIStorage> apiStorages = new List<APIStorage>();
+    private List<Role> roles = new List<Role>();
+    private string? selectedEmployeeId;
+    private int? selectedRoleId;
+    private int? selectedAPIStorage;
+
+    private bool showRoleForm = false;
+    private bool showAPIStorageForm = false;
+
+    private Role newRole = new Role { roleId = 0, roleName = "", roleDescription = "" };
+    private APIStorage newAPIStorage = new APIStorage { id = 0, applicationName = "", apiSecret = "" };
+
+    protected override async void OnParametersSet()
+    {
+        empRole = new EmpRole
+        {
+            empId = EmpRole.empId,
+            roleId = EmpRole.roleId,
+            systemId = EmpRole.systemId
+        };
+        selectedEmployeeId = empRole.empId;
+        selectedRoleId = empRole.roleId;
+        selectedAPIStorage = empRole.systemId != 0 ? empRole.systemId : null;
+
+        await LoadEmployees();
+        await LoadRoles();
+        await LoadAPIStorages();
+        StateHasChanged();
+    }
+
+    private async Task LoadEmployees()
+    {
+        if (EmployeeApi != null)
+        {
+            try
+            {
+                var response = await EmployeeApi.GetAllEmployees();
+                if (response.IsSuccessful && !string.IsNullOrEmpty(response.Content))
+                {
+                    employees = STJ.JsonSerializer.Deserialize<List<Employee>>(response.Content) ?? new List<Employee>();
+                }
+            }
+            catch { }
+        }
+    }
+
+    private async Task LoadRoles()
+    {
+        if (RoleApi != null)
+        {
+            try
+            {
+                var response = await RoleApi.GetAllRoles();
+                if (response.IsSuccessful && !string.IsNullOrEmpty(response.Content))
+                {
+                    roles = STJ.JsonSerializer.Deserialize<List<Role>>(response.Content) ?? new List<Role>();
+                }
+            }
+            catch { }
+        }
+    }
+
+    private async Task LoadAPIStorages()
+    {
+        if (APIStorageApi != null)
+        {
+            try
+            {
+                var response = await APIStorageApi.GetAllAPIStorages();
+                if (response.IsSuccessful && !string.IsNullOrEmpty(response.Content))
+                {
+                    apiStorages = STJ.JsonSerializer.Deserialize<List<APIStorage>>(response.Content) ?? new List<APIStorage>();
+                }
+            }
+            catch { }
+        }
+    }
+
+    private void ShowAPIStorageForm()
+    {
+        showAPIStorageForm = true;
+        showRoleForm = false;
+    }
+
+    private void NavigateToAPIStorage()
+    {
+        DialogService.Close(false);
+        NavigationManager.NavigateTo("/api-storage");
+    }
+
+    private async Task OnSave()
+    {
+        if (string.IsNullOrEmpty(selectedEmployeeId) || !selectedRoleId.HasValue)
+        {
+            NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Warning, Summary = "Validation", Detail = "Please select both employee and role" });
+            return;
+        }
+
+        empRole.empId = selectedEmployeeId;
+        empRole.roleId = selectedRoleId.Value;
+
+        if (selectedAPIStorage.HasValue)
+        {
+            empRole.systemId = selectedAPIStorage.Value;
+        }
+
+        bool isCreate = string.IsNullOrEmpty(EmpRole.empId) && EmpRole.roleId == 0;
+
+        try
+        {
+            var response = await EmpRoleApi.CreateEmpRole(empRole);
+            if (response.IsSuccessful)
+            {
+                string action = isCreate ? "created" : "updated";
+                NotificationService.Notify(new NotificationMessage
+                {
+                    Severity = NotificationSeverity.Success,
+                    Summary = "Success",
+                    Detail = $"Employee role {action} successfully"
+                });
+
+                if (OnEmpRoleSaved.HasDelegate)
+                {
+                    await OnEmpRoleSaved.InvokeAsync(empRole);
+                }
+
+                if (CloseAfter)
+                {
+                    DialogService.Close(true);
+                }
+
+                StateHasChanged();
+            }
+            else
+            {
+                string action = isCreate ? "create" : "update";
+                NotificationService.Notify(new NotificationMessage
+                {
+                    Severity = NotificationSeverity.Error,
+                    Summary = "Error",
+                    Detail = $"Failed to {action} employee role"
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            NotificationService.Notify(new NotificationMessage
+            {
+                Severity = NotificationSeverity.Error,
+                Summary = "Error",
+                Detail = ex.Message
+            });
+        }
+    }
+
+    private async Task OnRoleCreated(Role role)
+    {
+        await LoadRoles();
+        selectedRoleId = newRole.roleId;
+        showRoleForm = false;
+        StateHasChanged();
+    }
+
+    private async Task OnAPIStorageCreated(APIStorage apiStorage)
+    {
+        // Reload API storages and hide form
+        await LoadAPIStorages();
+        selectedAPIStorage = apiStorage.id;
+        showAPIStorageForm = false;
+        StateHasChanged();
+    }
+}
+

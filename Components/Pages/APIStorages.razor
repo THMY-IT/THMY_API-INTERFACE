@@ -1,0 +1,162 @@
+@page "/api-storage"
+@inject APIStorageApiController APIStorageApi
+@inject DialogService DialogService
+@inject NotificationService NotificationService
+@rendermode InteractiveServer
+
+<PageTitle>API Storage</PageTitle>
+
+<div style="margin-bottom: 2rem;">
+    <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.SpaceBetween" AlignItems="AlignItems.Center">
+        <div>
+            <RadzenText TextStyle="TextStyle.DisplayH4" style="margin: 0 0 0.5rem 0; font-weight: 700;">API Storage</RadzenText>
+            <RadzenText TextStyle="TextStyle.Body1" style="margin: 0;">Manage API keys and application secrets</RadzenText>
+        </div>
+        <RadzenButton Text="Create API Key" Icon="add" Click="CreateAPIStorage" ButtonStyle="ButtonStyle.Primary" 
+                      style="padding: 0.75rem 1.5rem; border-radius: 8px;" />
+    </RadzenStack>
+</div>
+
+<RadzenCard style="border-radius: 12px; padding: 1.5rem;">
+    @if (loading)
+    {
+        <div style="display: flex; justify-content: center; align-items: center; padding: 4rem;">
+            <RadzenProgressBarCircular ShowValue="false" Mode="ProgressBarMode.Indeterminate" Size="ProgressBarCircularSize.Large" />
+        </div>
+    }
+    else if (apiStorages != null)
+    {
+        <RadzenDataGrid Data="@apiStorages" TItem="APIStorage" AllowFiltering="true" AllowSorting="true" AllowPaging="true" PageSize="10" 
+                        style="border-radius: 8px; overflow: hidden;">
+            <Columns>
+                <RadzenDataGridColumn TItem="APIStorage" Property="id" Title="ID" Width="80px" />
+                <RadzenDataGridColumn TItem="APIStorage" Property="applicationName" Title="Application Name" />
+                <RadzenDataGridColumn TItem="APIStorage" Title="API Secret" Sortable="false" Filterable="false">
+                    <Template Context="apiStorage">
+                        <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" AlignItems="AlignItems.Center">
+                            <RadzenText style="font-family: monospace;">@MaskSecret(apiStorage.apiSecret)</RadzenText>
+                            <RadzenBadge BadgeStyle="BadgeStyle.Secondary" Text="Hidden" style="font-size: 0.7rem;" />
+                        </RadzenStack>
+                    </Template>
+                </RadzenDataGridColumn>
+                <RadzenDataGridColumn TItem="APIStorage" Title="Actions" Sortable="false" Filterable="false" Width="120px" TextAlign="TextAlign.Center">
+                    <Template Context="apiStorage">
+                        <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" JustifyContent="JustifyContent.Center">
+                            <RadzenButton Icon="edit" Size="ButtonSize.Small" ButtonStyle="ButtonStyle.Light" 
+                                          Click="@(() => EditAPIStorage(apiStorage))" 
+                                          style="border-radius: 6px;" />
+                            <RadzenButton Icon="delete" Size="ButtonSize.Small" ButtonStyle="ButtonStyle.Danger" 
+                                          Click="@(() => DeleteAPIStorage(apiStorage))" 
+                                          style="border-radius: 6px;" />
+                        </RadzenStack>
+                    </Template>
+                </RadzenDataGridColumn>
+            </Columns>
+        </RadzenDataGrid>
+    }
+</RadzenCard>
+
+@code {
+    private List<APIStorage>? apiStorages;
+    private bool loading = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAPIStorages();
+    }
+
+    private async Task LoadAPIStorages()
+    {
+        loading = true;
+        try
+        {
+            var response = await APIStorageApi.GetAllAPIStorages();
+            if (response.IsSuccessful && !string.IsNullOrEmpty(response.Content))
+            {
+                apiStorages = STJ.JsonSerializer.Deserialize<List<APIStorage>>(response.Content);
+            }
+            else
+            {
+                NotificationService.Notify(new NotificationMessage 
+                { 
+                    Severity = NotificationSeverity.Error, 
+                    Summary = "Error", 
+                    Detail = $"Failed to load API storages: {response.StatusDescription}" 
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            NotificationService.Notify(new NotificationMessage 
+            { 
+                Severity = NotificationSeverity.Error, 
+                Summary = "Error", 
+                Detail = ex.Message 
+            });
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    private string MaskSecret(string secret)
+    {
+        if (string.IsNullOrEmpty(secret) || secret.Length <= 8)
+            return "••••••••";
+        return secret.Substring(0, 4) + "••••" + secret.Substring(secret.Length - 4);
+    }
+
+    private async Task CreateAPIStorage()
+    {
+        var apiStorage = new APIStorage { id = 0, applicationName = "", apiSecret = "" };
+        var result = await DialogService.OpenAsync<APIStorageForm>("Create API Key", new Dictionary<string, object> { { "APIStorage", apiStorage } }, new DialogOptions { Width = "500px" });
+        
+        if (result == true)
+        {
+            await LoadAPIStorages();
+        }
+    }
+
+    private async Task EditAPIStorage(APIStorage apiStorage)
+    {
+        var result = await DialogService.OpenAsync<APIStorageForm>("Edit API Key", new Dictionary<string, object> { { "Model", apiStorage } }, new DialogOptions { Width = "500px" });
+        
+        if (result == true)
+        {
+            await LoadAPIStorages();
+        }
+    }
+
+    private async Task DeleteAPIStorage(APIStorage apiStorage)
+    {
+        var result = await DialogService.Confirm($"Are you sure you want to delete API key for '{apiStorage.applicationName}'?", "Delete API Key", new ConfirmOptions { OkButtonText = "Yes", CancelButtonText = "No" });
+        
+        if (result == true)
+        {
+            loading = true;
+            try
+            {
+                var response = await APIStorageApi.DeleteAPIStorage(apiStorage.id);
+                if (response.IsSuccessful)
+                {
+                    NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Success, Summary = "Success", Detail = "API key deleted successfully" });
+                    await LoadAPIStorages();
+                }
+                else
+                {
+                    NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Error, Summary = "Error", Detail = "Failed to delete API key" });
+                }
+            }
+            catch (Exception ex)
+            {
+                NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Error, Summary = "Error", Detail = ex.Message });
+            }
+            finally
+            {
+                loading = false;
+            }
+        }
+    }
+}
+

@@ -1,0 +1,304 @@
+@inject DialogService DialogService
+@inject RolePermissionApiController RolePermissionApi
+@inject NotificationService NotificationService
+@inject NavigationManager NavigationManager
+
+<RadzenStack Orientation="Orientation.Horizontal" Gap="1rem" Style="min-height: 400px;">
+
+    @* Left Panel - Main Form *@
+    <RadzenStack Style="flex: 1; min-width: 350px;">
+
+
+        @* Role Selection *@
+        <GenericDropDown TItem="Role"
+                         TValue="int?"
+                         Label="Role"
+                         Data="@roles"
+                         @bind-Value="@selectedRoleId"
+                         TextProperty="roleName"
+                         ValueProperty="roleId"
+                         ShowCreateButton="@(roles.Count == 0)"
+                         OnCreateClick="@ShowRoleForm"
+                         OnNavigateClick="@NavigateToRoles" />
+
+        @* Permission Selection *@
+        <GenericDropDown TItem="Permission"
+                         TValue="int?"
+                         Label="Permission"
+                         Data="@permissions"
+                         @bind-Value="@selectedPermissionId"
+                         TextProperty="permissionName"
+                         ValueProperty="permissionId"
+                         ShowCreateButton="@(permissions.Count == 0)"
+                         OnCreateClick="@ShowPermissionForm"
+                         OnNavigateClick="@NavigateToPermissions" />
+
+        @* API Storage Selection *@
+        <GenericDropDown TItem="APIStorage"
+                         TValue="int?"
+                         Label="System"
+                         Data="@apiStorages"
+                         @bind-Value="@selectedAPIStorage"
+                         TextProperty="applicationName"
+                         ValueProperty="id"
+                         ShowCreateButton="@(apiStorages.Count == 0)"
+                         OnCreateClick="@ShowAPIStorageForm"
+                         OnNavigateClick="@NavigateToAPIStorage" />
+
+        @* Action Buttons *@
+        <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.End" Gap="0.5rem" Style="margin-top: auto;">
+            <RadzenButton Text="Cancel" Variant="Variant.Text" Click="@(() => DialogService.Close(false))" />
+            <RadzenButton Text="Save" Variant="Variant.Flat" Click="@OnSave"
+                          Disabled="@(roles.Count == 0 || permissions.Count == 0 || selectedAPIStorage is null || selectedRoleId is null || selectedPermissionId is null)"
+                          ButtonStyle="ButtonStyle.Primary" />
+        </RadzenStack>
+
+    </RadzenStack>
+
+    @* Divider - Only show when a form is active *@
+    @if (showRoleForm || showPermissionForm || showAPIStorageForm)
+    {
+        <div style="width: 2px; background: linear-gradient(to bottom, #ccc 90%, #ccc 10%, #ccc 10%, #ccc 90%); align-self: stretch;"></div>
+    }
+
+    @* Right Panel - Create Forms *@
+    @if (showRoleForm || showPermissionForm || showAPIStorageForm)
+    {
+        <RadzenStack Style="flex: 1; min-width: 350px;">
+            @if (showRoleForm)
+            {
+                <RoleForm CloseAfter=false
+                          Role="@newRole"
+                          OnRoleSaved="@OnRoleCreated" />
+            }
+
+            @if (showPermissionForm)
+            {
+                <PermissionForm CloseAfter=false
+                                Permission="@newPermission"
+                                OnPermissionSaved="@OnPermissionCreated" />
+            }
+
+            @if (showAPIStorageForm)
+            {
+                <APIStorageForm CloseAfter=false
+                                APIStorage="@newAPIStorage"
+                                OnAPIStorageSaved="@OnAPIStorageCreated" />
+            }
+        </RadzenStack>
+    }
+
+</RadzenStack>
+
+@code {
+    [Parameter] public RolePermission RolePermission { get; set; } = new RolePermission { roleId = 0, permissionId = 0, systemId = 0 };
+    [Parameter] public RoleApiController? RoleApi { get; set; }
+    [Parameter] public PermissionApiController? PermissionApi { get; set; }
+    [Parameter] public APIStorageApiController? APIStorageApi { get; set; }
+
+    private RolePermission rolePermission = new RolePermission { roleId = 0, permissionId = 0, systemId = 0 };
+    private List<Role> roles = new List<Role>();
+    private List<Permission> permissions = new List<Permission>();
+    private List<APIStorage> apiStorages = new List<APIStorage>();
+    private int? selectedRoleId;
+    private int? selectedPermissionId;
+    private int? selectedAPIStorage;
+
+    // Form visibility flags
+    private bool showRoleForm = false;
+    private bool showPermissionForm = false;
+    private bool showAPIStorageForm = false;
+
+    // New entities for creation
+    private Role newRole = new Role { roleId = 0, roleName = "", roleDescription = "" };
+    private Permission newPermission = new Permission { permissionId = 0, permissionName = "", permissionDescription = "", systemId = 0 };
+    private APIStorage newAPIStorage = new APIStorage { id = 0, applicationName = "", apiSecret = "" };
+
+    protected override async void OnParametersSet()
+    {
+        rolePermission = new RolePermission
+        {
+            roleId = RolePermission.roleId,
+            permissionId = RolePermission.permissionId,
+            systemId = RolePermission.systemId
+        };
+        selectedRoleId = rolePermission.roleId;
+        selectedPermissionId = rolePermission.permissionId;
+
+        await LoadRoles();
+        await LoadPermissions();
+        await LoadAPIStorage();
+        StateHasChanged();
+    }
+
+    private async Task LoadAPIStorage()
+    {
+        if (APIStorageApi != null)
+        {
+            try
+            {
+                var response = await APIStorageApi.GetAllAPIStorages();
+                if (response.IsSuccessful && !string.IsNullOrEmpty(response.Content))
+                {
+                    apiStorages = STJ.JsonSerializer.Deserialize<List<APIStorage>>(response.Content) ?? new List<APIStorage>();
+                }
+            }
+            catch { }
+        }
+    }
+
+    private async Task LoadRoles()
+    {
+        if (RoleApi != null)
+        {
+            try
+            {
+                var response = await RoleApi.GetAllRoles();
+                if (response.IsSuccessful && !string.IsNullOrEmpty(response.Content))
+                {
+                    roles = STJ.JsonSerializer.Deserialize<List<Role>>(response.Content) ?? new List<Role>();
+                }
+            }
+            catch { }
+        }
+    }
+
+    private async Task LoadPermissions()
+    {
+        if (PermissionApi != null)
+        {
+            try
+            {
+                var response = await PermissionApi.GetAllPermissions();
+                if (response.IsSuccessful && !string.IsNullOrEmpty(response.Content))
+                {
+                    permissions = STJ.JsonSerializer.Deserialize<List<Permission>>(response.Content) ?? new List<Permission>();
+                }
+            }
+            catch { }
+        }
+    }
+
+
+    // Show form methods
+    private void ShowRoleForm()
+    {
+        showRoleForm = true;
+        showPermissionForm = false;
+        showAPIStorageForm = false;
+    }
+
+    private void ShowPermissionForm()
+    {
+        showPermissionForm = true;
+        showRoleForm = false;
+        showAPIStorageForm = false;
+    }
+
+    private void ShowAPIStorageForm()
+    {
+        showAPIStorageForm = true;
+        showRoleForm = false;
+        showPermissionForm = false;
+    }
+
+    // Create methods
+    private async Task OnRoleCreated(Role role)
+    {
+        await LoadRoles();
+        selectedRoleId = newRole.roleId;
+        showRoleForm = false;
+        StateHasChanged();
+    }
+
+    private async Task OnPermissionCreated(Permission permission)
+    {
+        // Reload permissions and hide form
+        await LoadPermissions();
+        selectedPermissionId = newPermission.permissionId;
+        showPermissionForm = false;
+        StateHasChanged();
+    }
+
+    private async Task OnAPIStorageCreated(APIStorage apiStorage)
+    {
+        // Reload API storages and hide form
+        await LoadAPIStorage();
+        selectedAPIStorage = apiStorage.id;
+        showAPIStorageForm = false;
+        StateHasChanged();
+    }
+
+    private async Task OnSave()
+    {
+        if (!selectedRoleId.HasValue || !selectedPermissionId.HasValue)
+        {
+            NotificationService.Notify(new NotificationMessage
+            {
+                Severity = NotificationSeverity.Warning,
+                Summary = "Validation",
+                Detail = "Please select both role and permission"
+            });
+            return;
+        }
+
+        rolePermission.roleId = selectedRoleId.Value;
+        rolePermission.permissionId = selectedPermissionId.Value;
+
+        if (selectedAPIStorage.HasValue)
+        {
+            rolePermission.systemId = selectedAPIStorage.Value;
+        }
+
+        try
+        {
+            var response = await RolePermissionApi.CreateRolePermission(rolePermission);
+            if (response.IsSuccessful)
+            {
+                NotificationService.Notify(new NotificationMessage
+                {
+                    Severity = NotificationSeverity.Success,
+                    Summary = "Success",
+                    Detail = "Permission assigned successfully"
+                });
+                DialogService.Close(true);
+            }
+            else
+            {
+                NotificationService.Notify(new NotificationMessage
+                {
+                    Severity = NotificationSeverity.Error,
+                    Summary = "Error",
+                    Detail = "Failed to assign permission"
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            NotificationService.Notify(new NotificationMessage
+            {
+                Severity = NotificationSeverity.Error,
+                Summary = "Error",
+                Detail = ex.Message
+            });
+        }
+    }
+
+    private void NavigateToRoles()
+    {
+        DialogService.Close(false);
+        NavigationManager.NavigateTo("/roles");
+    }
+
+    private void NavigateToPermissions()
+    {
+        DialogService.Close(false);
+        NavigationManager.NavigateTo("/permissions");
+    }
+
+    private void NavigateToAPIStorage()
+    {
+        DialogService.Close(false);
+        NavigationManager.NavigateTo("/api-storage");
+    }
+}

@@ -1,0 +1,103 @@
+﻿@inherits LayoutComponentBase
+@inject NavigationManager Navigation
+
+<RadzenNotification />
+<RadzenContextMenu />
+<RadzenDialog @rendermode="@RenderMode.InteractiveServer" />
+<RadzenTooltip />
+
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700&display=swap"
+    rel="stylesheet" />
+
+<style>
+    /* Background container */
+    .app-background {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        z-index: -1;
+        overflow: hidden;
+    }
+
+    /* Animated gradient */
+    .bg-gradient {
+        position: absolute;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(-45deg, #E8E8E8, #ffffff, #C3C2C2);
+        background-size: 400% 400%;
+        animation: gradientShift 15s ease infinite;
+    }
+
+    @@keyframes gradientShift {
+        0% {
+            background-position: 0% 50%;
+        }
+
+        50% {
+            background-position: 100% 50%;
+        }
+
+        100% {
+            background-position: 0% 50%;
+        }
+    }
+</style>
+<div class="app-background">
+    <!-- Animated background elements -->
+    <div class="bg-gradient"></div>
+</div>
+
+<RadzenLayout class="app-layout">
+    <RadzenSidebar @bind-Expanded="sidebarExpanded" class="rz-sidebar">
+        <RadzenPanelMenu class="rz-panel-menu">
+            <RadzenPanelMenuItem Text="Dashboard" Icon="dashboard" Path="/" />
+            <RadzenPanelMenuItem Text="Employees" Icon="people" Path="/employees" />
+            <RadzenPanelMenuItem Text="Roles" Icon="account_circle" Path="/roles" />
+            <RadzenPanelMenuItem Text="Permissions" Icon="security" Path="/permissions" />
+            <RadzenPanelMenuItem Text="Employee Roles" Icon="assignment_ind" Path="/emp-roles" />
+            <RadzenPanelMenuItem Text="Role Permissions" Icon="lock" Path="/role-permissions" />
+            <RadzenPanelMenuItem Text="API Storage" Icon="storage" Path="/api-storage" />
+        </RadzenPanelMenu>
+    </RadzenSidebar>
+
+    <RadzenBody Style="overflow-x:hidden; padding:1rem 2.5rem;">
+        <RadzenStack Orientation="Orientation.Horizontal" class="glass-header rz-p-3 rz-display-flex rz-shadow-3"
+            JustifyContent="JustifyContent.SpaceBetween" style="height:80px;">
+            <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center"
+                JustifyContent="JustifyContent.Start">
+
+                <RadzenStack class="theme-toggle-wrapper" Style="position:relative;width:50px;height:50px;" tabindex="0"
+                    @onclick:stopPropagation>
+                    <!-- Front (image) -->
+                    <RadzenImage class="ttw-img" Style="width:50px;height:50px;border-radius:50%;" Path="./THMY.png" />
+                    <!-- Back (toggle) -->
+                    <RadzenStack class="ttw-toggle" AlignItems="AlignItems.Center"
+                        JustifyContent="JustifyContent.Center">
+                        <RadzenAppearanceToggle LightTheme="software" DarkTheme="standard" />
+                    </RadzenStack>
+                </RadzenStack>
+
+                <RadzenStack Orientation="Orientation.Vertical" Gap="0">
+                    <RadzenText TextStyle="TextStyle.H4" Style="margin:0; font-family: 'Montserrat', sans-serif;">
+                        Management Interface</RadzenText>
+                </RadzenStack>
+            </RadzenStack>
+        </RadzenStack>
+        <RadzenContent>
+            @Body
+        </RadzenContent>
+    </RadzenBody>
+</RadzenLayout>
+
+<div id="blazor-error-ui">
+    An unhandled error has occurred.
+    <a href="" class="reload">Reload</a>
+    <a class="dismiss">🗙</a>
+</div>
+
+@code {
+    bool sidebarExpanded = true;
+}

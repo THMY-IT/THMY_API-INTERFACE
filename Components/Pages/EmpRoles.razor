@@ -1,0 +1,194 @@
+@page "/emp-roles"
+@inject EmpRoleApiController EmpRoleApi
+@inject EmployeeApiController EmployeeApi
+@inject RoleApiController RoleApi
+@inject APIStorageApiController APIStorageApi
+@inject DialogService DialogService
+@inject NotificationService NotificationService
+@rendermode InteractiveServer
+
+<PageTitle>Employee Roles</PageTitle>
+
+<div style="margin-bottom: 2rem;">
+    <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.SpaceBetween" AlignItems="AlignItems.Center">
+        <div>
+            <RadzenText TextStyle="TextStyle.DisplayH4" style="margin: 0 0 0.5rem 0; font-weight: 700;">Employee Roles</RadzenText>
+            <RadzenText TextStyle="TextStyle.Body1" style="margin: 0;">Manage employee-role associations</RadzenText>
+        </div>
+        <RadzenButton Text="Assign Role" Icon="add" Click="AssignRole" ButtonStyle="ButtonStyle.Primary" 
+                      style="padding: 0.75rem 1.5rem; border-radius: 8px;" />
+    </RadzenStack>
+</div>
+
+<RadzenRow Gap="1rem" style="margin-bottom: 2rem;">
+    <RadzenColumn Size="12" SizeMD="6">
+        <RadzenCard>
+            <RadzenText TextStyle="TextStyle.H6" style="margin-bottom: 1rem;">Employees by Role</RadzenText>
+            <RadzenChart>
+                <RadzenPieSeries Data="@empRoleData" Title="Roles" CategoryProperty="RoleId" ValueProperty="Count">
+                    <RadzenSeriesDataLabels Visible="true" />
+                </RadzenPieSeries>
+            </RadzenChart>
+        </RadzenCard>
+    </RadzenColumn>
+    <RadzenColumn Size="12" SizeMD="6">
+        <RadzenCard>
+            <RadzenText TextStyle="TextStyle.H6" style="margin-bottom: 1rem;">Assignments by System</RadzenText>
+            <RadzenChart>
+                <RadzenPieSeries Data="@erSystemData" Title="Systems" CategoryProperty="System" ValueProperty="Count">
+                    <RadzenSeriesDataLabels Visible="true" />
+                </RadzenPieSeries>
+            </RadzenChart>
+        </RadzenCard>
+    </RadzenColumn>
+</RadzenRow>
+
+<RadzenRow>
+    <RadzenColumn>
+        <RadzenCard>
+            @if (loading)
+            {
+                <RadzenProgressBarCircular ShowValue="false" Mode="ProgressBarMode.Indeterminate" />
+            }
+            else if (empRoles != null)
+            {
+                <RadzenDataGrid Data="@empRoles" TItem="EmpRole" AllowFiltering="true" AllowSorting="true" AllowPaging="true" PageSize="10" class="rz-datagrid">
+                    <Columns>
+                        <RadzenDataGridColumn TItem="EmpRole" Property="empId" Title="Employee ID" />
+                        <RadzenDataGridColumn TItem="EmpRole" Property="roleId" Title="Role ID" />
+                        <RadzenDataGridColumn TItem="EmpRole" Property="systemId" Title="System ID" />
+                        <RadzenDataGridColumn TItem="EmpRole" Title="Actions" Sortable="false" Filterable="false">
+                            <Template Context="empRole">
+                                <RadzenButton Icon="delete" Size="ButtonSize.Small" Variant="Variant.Flat" Click="@(() => RemoveRole(empRole))" />
+                            </Template>
+                        </RadzenDataGridColumn>
+                    </Columns>
+                </RadzenDataGrid>
+            }
+        </RadzenCard>
+    </RadzenColumn>
+</RadzenRow>
+
+@code {
+    private List<EmpRole>? empRoles;
+    private bool loading = false;
+    private List<EmpRoleData> empRoleData = new();
+    private List<ERSystemData> erSystemData = new();
+
+    public class EmpRoleData
+    {
+        public string RoleId { get; set; } = "";
+        public int Count { get; set; }
+    }
+
+    public class ERSystemData
+    {
+        public string System { get; set; } = "";
+        public int Count { get; set; }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadEmpRoles();
+    }
+
+    private async Task LoadEmpRoles()
+    {
+        loading = true;
+        try
+        {
+            var response = await EmpRoleApi.GetAllEmpRoles();
+            if (response.IsSuccessful && !string.IsNullOrEmpty(response.Content))
+            {
+                empRoles = STJ.JsonSerializer.Deserialize<List<EmpRole>>(response.Content);
+                
+                // Calculate role distribution
+                empRoleData = empRoles
+                    .GroupBy(er => $"Role {er.roleId}")
+                    .Select(g => new EmpRoleData { RoleId = g.Key, Count = g.Count() })
+                    .OrderByDescending(r => r.Count)
+                    .ToList();
+
+                // Calculate system distribution
+                erSystemData = empRoles
+                    .GroupBy(er => $"System {er.systemId}")
+                    .Select(g => new ERSystemData { System = g.Key, Count = g.Count() })
+                    .OrderByDescending(s => s.Count)
+                    .ToList();
+            }
+            else
+            {
+                NotificationService.Notify(new NotificationMessage 
+                { 
+                    Severity = NotificationSeverity.Error, 
+                    Summary = "Error", 
+                    Detail = $"Failed to load employee roles: {response.StatusDescription}" 
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            NotificationService.Notify(new NotificationMessage 
+            { 
+                Severity = NotificationSeverity.Error, 
+                Summary = "Error", 
+                Detail = ex.Message 
+            });
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    private async Task AssignRole()
+    {
+        var empRole = new EmpRole { empId = "", roleId = 0, systemId = 0 };
+        var result = await DialogService.OpenAsync<EmpRoleForm>("Assign Role to Employee", 
+            new Dictionary<string, object> 
+            { 
+                { "EmpRole", empRole }, 
+                { "EmployeeApi", EmployeeApi }, 
+                { "RoleApi", RoleApi },
+                { "APIStorageApi", APIStorageApi }
+            }, 
+            new DialogOptions { Width = "1000px" });
+        
+        if (result == true)
+        {
+            await LoadEmpRoles();
+        }
+    }
+
+    private async Task RemoveRole(EmpRole empRole)
+    {
+        var result = await DialogService.Confirm($"Are you sure you want to remove this role assignment?", "Remove Role Assignment", new ConfirmOptions { OkButtonText = "Yes", CancelButtonText = "No" });
+        
+        if (result == true)
+        {
+            loading = true;
+            try
+            {
+                var response = await EmpRoleApi.DeleteEmpRole(empRole);
+                if (response.IsSuccessful)
+                {
+                    NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Success, Summary = "Success", Detail = "Role assignment removed successfully" });
+                    await LoadEmpRoles();
+                }
+                else
+                {
+                    NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Error, Summary = "Error", Detail = "Failed to remove role assignment" });
+                }
+            }
+            catch (Exception ex)
+            {
+                NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Error, Summary = "Error", Detail = ex.Message });
+            }
+            finally
+            {
+                loading = false;
+            }
+        }
+    }
+}
+

@@ -1,0 +1,110 @@
+@inject DialogService DialogService
+@inject RoleApiController RoleApi
+@inject NotificationService NotificationService
+
+<RadzenStack Style="height:100%" JustifyContent="JustifyContent.SpaceBetween">
+    <RadzenStack>
+        <RadzenFormField>
+            <RadzenLabel Text="Role ID" />
+            <RadzenNumeric @bind-Value="@role.roleId" />
+        </RadzenFormField>
+        <RadzenFormField>
+            <RadzenLabel Text="Role Name" />
+            <RadzenTextBox @bind-Value="@role.roleName" />
+        </RadzenFormField>
+        <RadzenFormField>
+            <RadzenLabel Text="Description" />
+            <RadzenTextBox @bind-Value="@role.roleDescription" />
+        </RadzenFormField>
+    </RadzenStack>
+    <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.End" Gap="0.5rem" Style="margin-top: 1rem;">
+        @if (CloseAfter)
+        {
+        <RadzenButton Text="Cancel" Variant="Variant.Text" Click="@(() => DialogService.Close(false))" />
+        }
+
+        <RadzenButton Text="@(role.roleId == 0 ? "Create" : "Update")"
+                      Variant="Variant.Flat"
+                      Click="@OnSave"
+                      ButtonStyle="@(role.roleId == 0 ? ButtonStyle.Success : ButtonStyle.Primary)" />
+    </RadzenStack>
+</RadzenStack>
+
+@code {
+    [Parameter] public bool CloseAfter { get; set; } = true;
+    [Parameter] public Role Role { get; set; } = new Role { roleId = 0, roleName = "", roleDescription = "" };
+    [Parameter] public EventCallback<Role> OnRoleSaved { get; set; }
+
+    private Role role = new Role { roleId = 0, roleName = "", roleDescription = "" };
+
+    protected override void OnParametersSet()
+    {
+        role = new Role
+        {
+            roleId = Role.roleId,
+            roleName = Role.roleName ?? "",
+            roleDescription = Role.roleDescription ?? ""
+        };
+    }
+
+    private async Task OnSave()
+    {
+        try
+        {
+            RestSharp.RestResponse response;
+            bool isCreate = role.roleId == 0;
+
+            if (isCreate)
+            {
+                response = await RoleApi.CreateRole(role);
+            }
+            else
+            {
+                response = await RoleApi.UpdateRole(role.roleId, role);
+            }
+
+            if (response.IsSuccessful)
+            {
+                string action = isCreate ? "created" : "updated";
+                NotificationService.Notify(new NotificationMessage
+                {
+                    Severity = NotificationSeverity.Success,
+                    Summary = "Success",
+                    Detail = $"Role {action} successfully"
+                });
+
+                if (OnRoleSaved.HasDelegate)
+                {
+                    await OnRoleSaved.InvokeAsync(role);
+                }
+
+                if (CloseAfter)
+                {
+                DialogService.Close(true);
+                }
+
+                StateHasChanged();
+            }
+            else
+            {
+                string action = isCreate ? "create" : "update";
+                NotificationService.Notify(new NotificationMessage
+                {
+                    Severity = NotificationSeverity.Error,
+                    Summary = "Error",
+                    Detail = $"Failed to {action} role"
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            NotificationService.Notify(new NotificationMessage
+            {
+                Severity = NotificationSeverity.Error,
+                Summary = "Error",
+                Detail = ex.Message
+            });
+        }
+    }
+}
+

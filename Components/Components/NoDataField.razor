@@ -1,0 +1,18 @@
+﻿<RadzenStack Orientation="Orientation.Horizontal" class="rz-w-100 no-data-field" JustifyContent="JustifyContent.SpaceBetween" AlignItems="AlignItems.Center">
+    <RadzenLabel Text="@Label" />
+
+    <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" class="form-button-group">
+        <RadzenButton Text="Create Here" Size="ButtonSize.Small"
+                      Click="@OnCreateClick"
+                      ButtonStyle="ButtonStyle.Warning" />
+        <RadzenButton Text="Go to Page" Size="ButtonSize.Small"
+                      Click="@OnNavigateClick"
+                      Variant="Variant.Text" />
+    </RadzenStack>
+</RadzenStack>
+
+@code {
+    [Parameter] public string Label { get; set; } = "Item";
+    [Parameter] public EventCallback OnCreateClick { get; set; }
+    [Parameter] public EventCallback OnNavigateClick { get; set; }
+}

@@ -1,0 +1,117 @@
+﻿@page "/"
+@inject EmployeeApiController EmployeeApi
+@inject RoleApiController RoleApi
+@inject PermissionApiController PermissionApi
+@inject EmpRoleApiController EmpRoleApi
+@inject RolePermissionApiController RolePermissionApi
+@inject APIStorageApiController APIStorageApi
+@inject NotificationService NotificationService
+@rendermode InteractiveServer
+
+<PageTitle>Dashboard</PageTitle>
+
+<div style="margin-bottom: 2rem;">
+    <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.SpaceBetween" AlignItems="AlignItems.Center">
+        <div>
+            <RadzenText TextStyle="TextStyle.DisplayH4" style="margin: 0 0 0.5rem 0; font-weight: 700;">Dashboard</RadzenText>
+            <RadzenText TextStyle="TextStyle.Body1" style="margin: 0;">Overview of all entities in the system</RadzenText>
+        </div>
+    </RadzenStack>
+</div>
+
+<RadzenRow>
+    <RadzenColumn Size="12" SizeMD="6" SizeLG="3">
+        <RadzenCard>
+            <RadzenStack Gap="0.5rem">
+                <RadzenText TextStyle="TextStyle.H6">Employees</RadzenText>
+                <RadzenText TextStyle="TextStyle.H3">@employeeCount</RadzenText>
+            </RadzenStack>
+        </RadzenCard>
+    </RadzenColumn>
+    <RadzenColumn Size="12" SizeMD="6" SizeLG="3">
+        <RadzenCard>
+            <RadzenStack Gap="0.5rem">
+                <RadzenText TextStyle="TextStyle.H6">Roles</RadzenText>
+                <RadzenText TextStyle="TextStyle.H3">@roleCount</RadzenText>
+            </RadzenStack>
+        </RadzenCard>
+    </RadzenColumn>
+    <RadzenColumn Size="12" SizeMD="6" SizeLG="3">
+        <RadzenCard>
+            <RadzenStack Gap="0.5rem">
+                <RadzenText TextStyle="TextStyle.H6">Permissions</RadzenText>
+                <RadzenText TextStyle="TextStyle.H3">@permissionCount</RadzenText>
+            </RadzenStack>
+        </RadzenCard>
+    </RadzenColumn>
+    <RadzenColumn Size="12" SizeMD="6" SizeLG="3">
+        <RadzenCard>
+            <RadzenStack Gap="0.5rem">
+                <RadzenText TextStyle="TextStyle.H6">API Keys</RadzenText>
+                <RadzenText TextStyle="TextStyle.H3">@apiStorageCount</RadzenText>
+            </RadzenStack>
+        </RadzenCard>
+    </RadzenColumn>
+</RadzenRow>
+
+@if (loading)
+{
+    <RadzenProgressBarCircular ShowValue="false" Mode="ProgressBarMode.Indeterminate" />
+}
+
+@code {
+    private int employeeCount = 0;
+    private int roleCount = 0;
+    private int permissionCount = 0;
+    private int apiStorageCount = 0;
+    private bool loading = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadStats();
+    }
+
+    private async Task LoadStats()
+    {
+        loading = true;
+        try
+        {
+            var empResponse = await EmployeeApi.GetAllEmployees();
+            if (empResponse.IsSuccessful && !string.IsNullOrEmpty(empResponse.Content))
+            {
+                List<Employee> employees = STJ.JsonSerializer.Deserialize<List<Employee>>(empResponse.Content);
+                employees = employees.Where(e => e.status.Equals("Active")).ToList();
+                employeeCount = employees?.Count ?? 0;
+            }
+
+            var roleResponse = await RoleApi.GetAllRoles();
+            if (roleResponse.IsSuccessful && !string.IsNullOrEmpty(roleResponse.Content))
+            {
+                var roles = STJ.JsonSerializer.Deserialize<List<Role>>(roleResponse.Content);
+                roleCount = roles?.Count ?? 0;
+            }
+
+            var permResponse = await PermissionApi.GetAllPermissions();
+            if (permResponse.IsSuccessful && !string.IsNullOrEmpty(permResponse.Content))
+            {
+                var permissions = STJ.JsonSerializer.Deserialize<List<Permission>>(permResponse.Content);
+                permissionCount = permissions?.Count ?? 0;
+            }
+
+            var apiResponse = await APIStorageApi.GetAllAPIStorages();
+            if (apiResponse.IsSuccessful && !string.IsNullOrEmpty(apiResponse.Content))
+            {
+                var apiStorages = STJ.JsonSerializer.Deserialize<List<APIStorage>>(apiResponse.Content);
+                apiStorageCount = apiStorages?.Count ?? 0;
+            }
+        }
+        catch (Exception ex)
+        {
+            NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Error, Summary = "Error", Detail = ex.Message });
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+}

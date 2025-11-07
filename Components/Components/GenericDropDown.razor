@@ -1,0 +1,61 @@
+@typeparam TItem
+@typeparam TValue
+
+
+@if (Data == null || Data.Count == 0)
+{
+    @if (ShowCreateButton)
+    {
+        <NoDataField Label="@Label"
+                     OnCreateClick="@OnCreateClick"
+                     OnNavigateClick="@OnNavigateClick" />
+    }
+    else
+    {
+        <RadzenAlert AlertStyle="AlertStyle.Warning" Variant="Variant.Flat" Shade="Shade.Lighter">
+            <RadzenText TextStyle="TextStyle.Body2">No @Label.ToLower() available.</RadzenText>
+        </RadzenAlert>
+    }
+}
+else
+{
+
+    <style>
+        .rz-dropdown {
+            background-color: var(--rz-base-100) !important;
+            transition: all  .3s ease-in-out;
+        }
+
+            .rz-dropdown:hover {
+                background-color: var(--rz-base-300) !important;
+            }
+    </style>
+
+    <RadzenFormField>
+        <RadzenLabel Text="@Label" Style="flex:1;" />
+        <RadzenDropDown Data="@Data"
+                        @bind-Value="@Value"
+                        TextProperty="@TextProperty"
+                        ValueProperty="@ValueProperty"
+                        Placeholder="@Placeholder"
+                        AllowClear="@AllowClear"
+                        Style="width: 100%; flex:3;" />
+    </RadzenFormField>
+}
+
+@code {
+    [Parameter] public string Label { get; set; } = "Item";
+    [Parameter] public List<TItem>? Data { get; set; }
+    [Parameter] public TValue? Value { get; set; }
+    [Parameter] public EventCallback<TValue?> ValueChanged { get; set; }
+    [Parameter] public string TextProperty { get; set; } = "Name";
+    [Parameter] public string ValueProperty { get; set; } = "Id";
+    [Parameter] public string? Placeholder { get; set; }
+    [Parameter] public bool AllowClear { get; set; } = true;
+    [Parameter] public bool ShowCreateButton { get; set; } = false;
+    [Parameter] public EventCallback OnCreateClick { get; set; }
+    [Parameter] public EventCallback OnNavigateClick { get; set; }
+
+    private string GetPlaceholder => Placeholder ?? $"Select {Label}";
+}
+

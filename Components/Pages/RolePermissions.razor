@@ -1,0 +1,186 @@
+@page "/role-permissions"
+@inject RolePermissionApiController RolePermissionApi
+@inject RoleApiController RoleApi
+@inject PermissionApiController PermissionApi
+@inject APIStorageApiController APIStorageApi
+@inject DialogService DialogService
+@inject NotificationService NotificationService
+@rendermode InteractiveServer
+
+<PageTitle>Role Permissions</PageTitle>
+
+<div style="margin-bottom: 2rem;">
+    <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.SpaceBetween" AlignItems="AlignItems.Center">
+        <div>
+            <RadzenText TextStyle="TextStyle.DisplayH4" style="margin: 0 0 0.5rem 0; font-weight: 700;">Role Permissions</RadzenText>
+            <RadzenText TextStyle="TextStyle.Body1" style="margin: 0;">Manage role-permission associations</RadzenText>
+        </div>
+        <RadzenButton Text="Assign Permission" Icon="add" Click="AssignPermission" ButtonStyle="ButtonStyle.Primary" 
+                      style="padding: 0.75rem 1.5rem; border-radius: 8px;" />
+    </RadzenStack>
+</div>
+
+<RadzenRow Gap="1rem" style="margin-bottom: 2rem;">
+    <RadzenColumn Size="12" SizeMD="6">
+        <RadzenCard>
+            <RadzenText TextStyle="TextStyle.H6" style="margin-bottom: 1rem;">Permissions by Role</RadzenText>
+            <RadzenChart>
+                <RadzenPieSeries Data="@rolePermData" Title="Roles" CategoryProperty="RoleId" ValueProperty="Count">
+                    <RadzenSeriesDataLabels Visible="true" />
+                </RadzenPieSeries>
+            </RadzenChart>
+        </RadzenCard>
+    </RadzenColumn>
+    <RadzenColumn Size="12" SizeMD="6">
+        <RadzenCard>
+            <RadzenText TextStyle="TextStyle.H6" style="margin-bottom: 1rem;">Assignments by System</RadzenText>
+            <RadzenChart>
+                <RadzenPieSeries Data="@rpSystemData" Title="Systems" CategoryProperty="System" ValueProperty="Count">
+                    <RadzenSeriesDataLabels Visible="true" />
+                </RadzenPieSeries>
+            </RadzenChart>
+        </RadzenCard>
+    </RadzenColumn>
+</RadzenRow>
+
+<RadzenRow>
+    <RadzenColumn>
+        <RadzenCard>
+            @if (loading)
+            {
+                <RadzenProgressBarCircular ShowValue="false" Mode="ProgressBarMode.Indeterminate" />
+            }
+            else if (rolePermissions != null)
+            {
+                <RadzenDataGrid Data="@rolePermissions" TItem="RolePermission" AllowFiltering="true" AllowSorting="true" AllowPaging="true" PageSize="10" class="rz-datagrid">
+                    <Columns>
+                        <RadzenDataGridColumn TItem="RolePermission" Property="roleId" Title="Role ID" />
+                        <RadzenDataGridColumn TItem="RolePermission" Property="permissionId" Title="Permission ID" />
+                        <RadzenDataGridColumn TItem="RolePermission" Property="systemId" Title="System ID" />
+                        <RadzenDataGridColumn TItem="RolePermission" Title="Actions" Sortable="false" Filterable="false">
+                            <Template Context="rolePermission">
+                                <RadzenButton Icon="delete" Size="ButtonSize.Small" Variant="Variant.Flat" Click="@(() => RemovePermission(rolePermission))" />
+                            </Template>
+                        </RadzenDataGridColumn>
+                    </Columns>
+                </RadzenDataGrid>
+            }
+        </RadzenCard>
+    </RadzenColumn>
+</RadzenRow>
+
+@code {
+    private List<RolePermission>? rolePermissions;
+    private bool loading = false;
+    private List<RolePermData> rolePermData = new();
+    private List<RPSystemData> rpSystemData = new();
+
+    public class RolePermData
+    {
+        public string RoleId { get; set; } = "";
+        public int Count { get; set; }
+    }
+
+    public class RPSystemData
+    {
+        public string System { get; set; } = "";
+        public int Count { get; set; }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadRolePermissions();
+    }
+
+    private async Task LoadRolePermissions()
+    {
+        loading = true;
+        try
+        {
+            var response = await RolePermissionApi.GetAllRolePermissions();
+            if (response.IsSuccessful && !string.IsNullOrEmpty(response.Content))
+            {
+                rolePermissions = STJ.JsonSerializer.Deserialize<List<RolePermission>>(response.Content);
+                
+                // Calculate role distribution
+                rolePermData = rolePermissions
+                    .GroupBy(rp => $"Role {rp.roleId}")
+                    .Select(g => new RolePermData { RoleId = g.Key, Count = g.Count() })
+                    .OrderByDescending(r => r.Count)
+                    .ToList();
+
+                // Calculate system distribution
+                rpSystemData = rolePermissions
+                    .GroupBy(rp => $"System {rp.systemId}")
+                    .Select(g => new RPSystemData { System = g.Key, Count = g.Count() })
+                    .OrderByDescending(s => s.Count)
+                    .ToList();
+            }
+            else
+            {
+                NotificationService.Notify(new NotificationMessage 
+                { 
+                    Severity = NotificationSeverity.Error, 
+                    Summary = "Error", 
+                    Detail = $"Failed to load role permissions: {response.StatusDescription}" 
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            NotificationService.Notify(new NotificationMessage 
+            { 
+                Severity = NotificationSeverity.Error, 
+                Summary = "Error", 
+                Detail = ex.Message 
+            });
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    private async Task AssignPermission()
+    {
+        var rolePermission = new RolePermission { roleId = 0, permissionId = 0, systemId = 0 };
+        var result = await DialogService.OpenAsync<RolePermissionForm>("Assign Permission to Role", new Dictionary<string, object> { { "RolePermission", rolePermission }, { "RoleApi", RoleApi }, { "PermissionApi", PermissionApi }, { "APIStorageApi", APIStorageApi } }, new DialogOptions { Width = "1000px" });
+        
+        if (result == true)
+        {
+            await LoadRolePermissions();
+        }
+    }
+
+    private async Task RemovePermission(RolePermission rolePermission)
+    {
+        var result = await DialogService.Confirm($"Are you sure you want to remove this permission assignment?", "Remove Permission Assignment", new ConfirmOptions { OkButtonText = "Yes", CancelButtonText = "No" });
+        
+        if (result == true)
+        {
+            loading = true;
+            try
+            {
+                var response = await RolePermissionApi.DeleteRolePermission(rolePermission);
+                if (response.IsSuccessful)
+                {
+                    NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Success, Summary = "Success", Detail = "Permission assignment removed successfully" });
+                    await LoadRolePermissions();
+                }
+                else
+                {
+                    NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Error, Summary = "Error", Detail = "Failed to remove permission assignment" });
+                }
+            }
+            catch (Exception ex)
+            {
+                NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Error, Summary = "Error", Detail = ex.Message });
+            }
+            finally
+            {
+                loading = false;
+            }
+        }
+    }
+}
+

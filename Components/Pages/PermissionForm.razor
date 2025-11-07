@@ -1,0 +1,114 @@
+@inject DialogService DialogService
+@inject PermissionApiController PermissionApi
+@inject NotificationService NotificationService
+
+<RadzenStack Style="height:100%" JustifyContent="JustifyContent.SpaceBetween">
+    <RadzenStack>
+        <RadzenFormField>
+            <RadzenLabel Text="Permission ID" />
+            <RadzenNumeric @bind-Value="@permission.permissionId" />
+        </RadzenFormField>
+        <RadzenFormField>
+            <RadzenLabel Text="Permission Name" />
+            <RadzenTextBox @bind-Value="@permission.permissionName" />
+        </RadzenFormField>
+        <RadzenFormField>
+            <RadzenLabel Text="Description" />
+            <RadzenTextBox @bind-Value="@permission.permissionDescription" />
+        </RadzenFormField>
+        <RadzenFormField>
+            <RadzenLabel Text="System ID" />
+            <RadzenNumeric @bind-Value="@permission.systemId" />
+        </RadzenFormField>
+    </RadzenStack>
+    <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.End" Gap="0.5rem" Style="margin-top: 1rem;">
+        @if (CloseAfter)
+        {
+            <RadzenButton Text="Cancel" Variant="Variant.Text" Click="@(() => DialogService.Close(false))" />
+        }
+        <RadzenButton Text="@(permission.permissionId == 0 ? "Create" : "Update")"
+                               Variant="Variant.Flat" 
+                      Click="@OnSave" 
+                      ButtonStyle="@(permission.permissionId == 0 ? ButtonStyle.Success : ButtonStyle.Primary)" />
+    </RadzenStack>
+</RadzenStack>
+
+@code {
+    [Parameter] public bool CloseAfter { get; set; } = true;
+    [Parameter] public Permission Permission { get; set; } = new Permission { permissionId = 0, permissionName = "", permissionDescription = "", systemId = 0 };
+    [Parameter] public EventCallback<Permission> OnPermissionSaved { get; set; }
+    
+    private Permission permission = new Permission { permissionId = 0, permissionName = "", permissionDescription = "", systemId = 0 };
+
+    protected override void OnParametersSet()
+    {
+        permission = new Permission 
+        { 
+            permissionId = Permission.permissionId, 
+            permissionName = Permission.permissionName ?? "", 
+            permissionDescription = Permission.permissionDescription ?? "",
+            systemId = Permission.systemId
+        };
+    }
+
+    private async Task OnSave()
+    {
+        try
+        {
+            RestSharp.RestResponse response;
+            bool isCreate = permission.permissionId == 0;
+            
+            if (isCreate)
+            {
+                response = await PermissionApi.CreatePermission(permission);
+            }
+            else
+            {
+                response = await PermissionApi.UpdatePermission(permission.permissionId, permission);
+            }
+
+            if (response.IsSuccessful)
+            {
+                string action = isCreate ? "created" : "updated";
+                NotificationService.Notify(new NotificationMessage 
+                { 
+                    Severity = NotificationSeverity.Success, 
+                    Summary = "Success", 
+                    Detail = $"Permission {action} successfully" 
+                });
+
+                if (OnPermissionSaved.HasDelegate)
+                {
+                    await OnPermissionSaved.InvokeAsync(permission);
+                }
+
+                if (CloseAfter)
+                {
+                    DialogService.Close(true);
+                }
+
+                StateHasChanged();
+            }
+            else
+            {
+                string action = isCreate ? "create" : "update";
+                NotificationService.Notify(new NotificationMessage 
+                { 
+                    Severity = NotificationSeverity.Error, 
+                    Summary = "Error", 
+                    Detail = $"Failed to {action} permission" 
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            NotificationService.Notify(new NotificationMessage 
+            { 
+                Severity = NotificationSeverity.Error, 
+                Summary = "Error", 
+                Detail = ex.Message 
+            });
+        }
+    }
+}
+

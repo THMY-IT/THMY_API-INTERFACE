@@ -1,0 +1,102 @@
+@inject DialogService DialogService
+@inject APIStorageApiController APIStorageApi
+@inject NotificationService NotificationService
+
+<RadzenStack Style="height:100%" JustifyContent="JustifyContent.SpaceBetween">
+    <RadzenStack>
+        <RadzenFormField>
+            <RadzenLabel Text="Application Name" />
+            <RadzenTextBox @bind-Value="@apiStorage.applicationName" />
+        </RadzenFormField>
+        <RadzenFormField>
+            <RadzenLabel Text="API Secret" />
+            <RadzenPassword @bind-Value="@apiStorage.apiSecret" />
+        </RadzenFormField>
+    </RadzenStack>
+    <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.End" Gap="0.5rem" Style="margin-top: 1rem;">
+        <RadzenButton Text="Cancel" Variant="Variant.Flat" Click="@(() => DialogService.Close(false))" />
+        <RadzenButton Text="@(apiStorage.id == 0 ? "Create" : "Update")" 
+                      Variant="Variant.Flat" 
+                      Click="@OnSave" 
+                      ButtonStyle="@(apiStorage.id == 0 ? ButtonStyle.Success : ButtonStyle.Primary)" />
+    </RadzenStack>
+</RadzenStack>
+
+@code {
+    [Parameter] public bool CloseAfter { get; set; } = true;
+    [Parameter] public APIStorage APIStorage { get; set; }
+    [Parameter] public EventCallback<APIStorage> OnAPIStorageSaved { get; set; }
+
+    private APIStorage apiStorage = new APIStorage { id = 0, applicationName = "", apiSecret = "" };
+
+    protected override void OnParametersSet()
+    {
+        apiStorage = new APIStorage 
+        { 
+            id = APIStorage.id,
+            applicationName = APIStorage.applicationName ?? "",
+            apiSecret = APIStorage.apiSecret ?? ""
+        };
+    }
+
+    private async Task OnSave()
+    {
+        try
+        {
+            RestSharp.RestResponse response;
+            bool isCreate = apiStorage.id == 0;
+            
+            if (isCreate)
+            {
+                response = await APIStorageApi.CreateAPIStorage(apiStorage);
+            }
+            else
+            {
+                response = await APIStorageApi.UpdateAPIStorage(apiStorage.id, apiStorage);
+            }
+
+            if (response.IsSuccessful)
+            {
+                string action = isCreate ? "created" : "updated";
+                NotificationService.Notify(new NotificationMessage 
+                { 
+                    Severity = NotificationSeverity.Success, 
+                    Summary = "Success", 
+                    Detail = $"API storage {action} successfully" 
+                });
+
+                if (OnAPIStorageSaved.HasDelegate)
+                {
+                    await OnAPIStorageSaved.InvokeAsync(apiStorage);
+                }
+
+                if (CloseAfter)
+                {
+                    DialogService.Close(true);
+                }
+
+                StateHasChanged();
+            }
+            else
+            {
+                string action = isCreate ? "create" : "update";
+                NotificationService.Notify(new NotificationMessage 
+                { 
+                    Severity = NotificationSeverity.Error, 
+                    Summary = "Error", 
+                    Detail = $"Failed to {action} API storage" 
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            NotificationService.Notify(new NotificationMessage 
+            { 
+                Severity = NotificationSeverity.Error, 
+                Summary = "Error", 
+                Detail = ex.Message 
+            });
+        }
+    }
+}
+

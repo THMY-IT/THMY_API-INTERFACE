@@ -1,0 +1,147 @@
+@page "/employees"
+@inject EmployeeApiController EmployeeApi
+@inject NotificationService NotificationService
+@rendermode InteractiveServer
+
+<PageTitle>Employees</PageTitle>
+
+<div style="margin-bottom: 2rem;">
+    <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.SpaceBetween" AlignItems="AlignItems.Center">
+        <div>
+            <RadzenText TextStyle="TextStyle.DisplayH4" style="margin: 0 0 0.5rem 0; font-weight: 700;">Employees</RadzenText>
+            <RadzenText TextStyle="TextStyle.Body1" style="margin: 0;">View all employees (Read-Only)</RadzenText>
+        </div>
+    </RadzenStack>
+</div>
+
+<RadzenRow Gap="1rem" style="margin-bottom: 2rem;">
+    <RadzenColumn Size="12" SizeMD="6">
+        <RadzenCard>
+            <RadzenText TextStyle="TextStyle.H6" style="margin-bottom: 1rem;">Department Distribution</RadzenText>
+            <RadzenChart>
+                <RadzenPieSeries Data="@departmentData" Title="Departments" CategoryProperty="Department" ValueProperty="Count">
+                    <RadzenSeriesDataLabels Visible="true" />
+                </RadzenPieSeries>
+            </RadzenChart>
+        </RadzenCard>
+    </RadzenColumn>
+    <RadzenColumn Size="12" SizeMD="6">
+        <RadzenCard>
+            <RadzenText TextStyle="TextStyle.H6" style="margin-bottom: 1rem;">Position Distribution</RadzenText>
+            <RadzenChart>
+                <RadzenPieSeries Data="@positionData" Title="Positions" CategoryProperty="Position" ValueProperty="Count">
+                    <RadzenSeriesDataLabels Visible="true" />
+                </RadzenPieSeries>
+            </RadzenChart>
+        </RadzenCard>
+    </RadzenColumn>
+</RadzenRow>
+
+<RadzenRow>
+    <RadzenColumn>
+        <RadzenCard>
+            @if (loading)
+            {
+                <RadzenProgressBarCircular ShowValue="false" Mode="ProgressBarMode.Indeterminate" />
+            }
+            else if (employees != null)
+            {
+                <RadzenDataGrid Data="@employees" TItem="Employee" AllowFiltering="true" AllowSorting="true" AllowPaging="true" PageSize="10" class="rz-datagrid">
+                    <Columns>
+                        <RadzenDataGridColumn TItem="Employee" Property="empId" Title="Employee ID" Width="120px" />
+                        <RadzenDataGridColumn TItem="Employee" Property="empName" Title="Name" Width="180px" />
+                        <RadzenDataGridColumn TItem="Employee" Property="department" Title="Department" Width="150px" />
+                        <RadzenDataGridColumn TItem="Employee" Property="position" Title="Position" Width="150px" />
+                        <RadzenDataGridColumn TItem="Employee" Property="email" Title="Email" Width="200px" />
+                        <RadzenDataGridColumn TItem="Employee" Property="phoneNo" Title="Phone" Width="130px" />
+                        <RadzenDataGridColumn TItem="Employee" Property="status" Title="Status" Width="100px">
+                            <Template Context="emp">
+                                <RadzenBadge Text="@emp.status" 
+                                             BadgeStyle="@(emp.status == "Active" ? BadgeStyle.Success : BadgeStyle.Secondary)" 
+                                             Variant="Variant.Filled" />
+                            </Template>
+                        </RadzenDataGridColumn>
+                        <RadzenDataGridColumn TItem="Employee" Property="createDate" Title="Create Date" Width="120px" FormatString="{0:MM/dd/yyyy}" />
+                    </Columns>
+                </RadzenDataGrid>
+            }
+        </RadzenCard>
+    </RadzenColumn>
+</RadzenRow>
+
+@code {
+    private List<Employee>? employees;
+    private bool loading = false;
+    private List<DepartmentData> departmentData = new();
+    private List<PositionData> positionData = new();
+
+    public class DepartmentData
+    {
+        public string Department { get; set; } = "";
+        public int Count { get; set; }
+    }
+
+    public class PositionData
+    {
+        public string Position { get; set; } = "";
+        public int Count { get; set; }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadEmployees();
+    }
+
+    private async Task LoadEmployees()
+    {
+        loading = true;
+        try
+        {
+            var response = await EmployeeApi.GetAllEmployees();
+            if (response.IsSuccessful && !string.IsNullOrEmpty(response.Content))
+            {
+                employees = STJ.JsonSerializer.Deserialize<List<Employee>>(response.Content);
+                employees.Select(e => e.status = "Active").ToList();
+                
+                // Calculate department distribution
+                departmentData = employees
+                    .Where(e => !string.IsNullOrEmpty(e.department))
+                    .GroupBy(e => e.department)
+                    .Select(g => new DepartmentData { Department = g.Key, Count = g.Count() })
+                    .OrderByDescending(d => d.Count)
+                    .ToList();
+
+                // Calculate position distribution
+                positionData = employees
+                    .Where(e => !string.IsNullOrEmpty(e.position))
+                    .GroupBy(e => e.position)
+                    .Select(g => new PositionData { Position = g.Key, Count = g.Count() })
+                    .OrderByDescending(p => p.Count)
+                    .ToList();
+            }
+            else
+            {
+                NotificationService.Notify(new NotificationMessage 
+                { 
+                    Severity = NotificationSeverity.Error, 
+                    Summary = "Error", 
+                    Detail = $"Failed to load employees: {response.StatusDescription}" 
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            NotificationService.Notify(new NotificationMessage 
+            { 
+                Severity = NotificationSeverity.Error, 
+                Summary = "Error", 
+                Detail = ex.Message 
+            });
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+}
+

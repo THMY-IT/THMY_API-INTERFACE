@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Content Include=".gitignore" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="9.0.10" />
+    <PackageReference Include="RestSharp" Version="112.1.1-alpha.0.4" />
+	  <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+	  <PackageReference Include="Radzen.Blazor" Version="8.1.8" />
+    <Reference Include="InternalSystem_ModelContext">
+      <HintPath>InternalSystem_ModelContext.dll</HintPath>
+    </Reference>
+    <Reference Include="THMY-API">
+      <HintPath>THMY-API.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+     
+</Project>

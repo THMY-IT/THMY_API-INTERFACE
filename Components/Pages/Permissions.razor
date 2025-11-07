@@ -1,0 +1,194 @@
+@page "/permissions"
+@inject PermissionApiController PermissionApi
+@inject DialogService DialogService
+@inject NotificationService NotificationService
+@rendermode InteractiveServer
+
+<PageTitle>Permissions</PageTitle>
+
+<div style="margin-bottom: 2rem;">
+    <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.SpaceBetween" AlignItems="AlignItems.Center">
+        <div>
+            <RadzenText TextStyle="TextStyle.DisplayH4" style="margin: 0 0 0.5rem 0; font-weight: 700;">Permissions</RadzenText>
+            <RadzenText TextStyle="TextStyle.Body1" style="margin: 0;">Manage system permissions</RadzenText>
+        </div>
+        <RadzenButton Text="Create Permission" Icon="add" Click="CreatePermission" ButtonStyle="ButtonStyle.Primary" 
+                      style="padding: 0.75rem 1.5rem; border-radius: 8px;" />
+    </RadzenStack>
+</div>
+
+<RadzenRow Gap="1rem" style="margin-bottom: 2rem;">
+    <RadzenColumn Size="12">
+        <RadzenCard>
+            <RadzenText TextStyle="TextStyle.H6" style="margin-bottom: 1rem;">Permissions by System</RadzenText>
+            <RadzenChart>
+                <RadzenPieSeries Data="@systemData" Title="Systems" CategoryProperty="System" ValueProperty="Count">
+                    <RadzenSeriesDataLabels Visible="true" />
+                </RadzenPieSeries>
+            </RadzenChart>
+        </RadzenCard>
+    </RadzenColumn>
+</RadzenRow>
+
+<RadzenRow>
+    <RadzenColumn>
+        <RadzenCard>
+            <RadzenStack Orientation="Orientation.Horizontal" Gap="1rem" Style="margin-bottom: 1rem;">
+                <RadzenFormField>
+                    <RadzenLabel Text="Filter by System ID" />
+                    <RadzenNumeric TValue="int?" @bind-Value="@filterSystemId" AllowClear="true" Change="OnFilterChange" />
+                </RadzenFormField>
+            </RadzenStack>
+            @if (loading)
+            {
+                <RadzenProgressBarCircular ShowValue="false" Mode="ProgressBarMode.Indeterminate" />
+            }
+            else if (permissions != null)
+            {
+                <RadzenDataGrid Data="@permissions" TItem="Permission" AllowFiltering="true" AllowSorting="true" AllowPaging="true" PageSize="10" class="rz-datagrid">
+                    <Columns>
+                        <RadzenDataGridColumn TItem="Permission" Property="permissionId" Title="ID" />
+                        <RadzenDataGridColumn TItem="Permission" Property="permissionName" Title="Name" />
+                        <RadzenDataGridColumn TItem="Permission" Property="permissionDescription" Title="Description" />
+                        <RadzenDataGridColumn TItem="Permission" Property="systemId" Title="System ID" />
+                        <RadzenDataGridColumn TItem="Permission" Title="Actions" Sortable="false" Filterable="false">
+                            <Template Context="permission">
+                                <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem">
+                                    <RadzenButton Icon="edit" Size="ButtonSize.Small" Variant="Variant.Flat" Click="@(() => EditPermission(permission))" />
+                                    <RadzenButton Icon="delete" Size="ButtonSize.Small" Variant="Variant.Flat" Click="@(() => DeletePermission(permission))" />
+                                </RadzenStack>
+                            </Template>
+                        </RadzenDataGridColumn>
+                    </Columns>
+                </RadzenDataGrid>
+            }
+        </RadzenCard>
+    </RadzenColumn>
+</RadzenRow>
+
+@code {
+    private List<Permission>? permissions;
+    private bool loading = false;
+    private int? filterSystemId;
+    private List<SystemData> systemData = new();
+
+    public class SystemData
+    {
+        public string System { get; set; } = "";
+        public int Count { get; set; }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadPermissions();
+    }
+
+    private async Task LoadPermissions()
+    {
+        loading = true;
+        try
+        {
+            RestSharp.RestResponse response;
+            if (filterSystemId.HasValue)
+            {
+                response = await PermissionApi.GetPermissionsBySystem(filterSystemId.Value);
+            }
+            else
+            {
+                response = await PermissionApi.GetAllPermissions();
+            }
+
+            if (response.IsSuccessful && !string.IsNullOrEmpty(response.Content))
+            {
+                permissions = STJ.JsonSerializer.Deserialize<List<Permission>>(response.Content);
+                
+                // Calculate system distribution
+                systemData = permissions
+                    .GroupBy(p => $"System {p.systemId}")
+                    .Select(g => new SystemData { System = g.Key, Count = g.Count() })
+                    .OrderByDescending(s => s.Count)
+                    .ToList();
+            }
+            else
+            {
+                NotificationService.Notify(new NotificationMessage 
+                { 
+                    Severity = NotificationSeverity.Error, 
+                    Summary = "Error", 
+                    Detail = $"Failed to load permissions: {response.StatusDescription}" 
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            NotificationService.Notify(new NotificationMessage 
+            { 
+                Severity = NotificationSeverity.Error, 
+                Summary = "Error", 
+                Detail = ex.Message 
+            });
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    private async Task OnFilterChange()
+    {
+        await LoadPermissions();
+    }
+
+    private async Task CreatePermission()
+    {
+        var permission = new Permission { permissionId = 0, permissionName = "", permissionDescription = "", systemId = 0 };
+        var result = await DialogService.OpenAsync<PermissionForm>("Create Permission", new Dictionary<string, object> { { "Permission", permission } }, new DialogOptions { Width = "500px" });
+        
+        if (result == true)
+        {
+            await LoadPermissions();
+        }
+    }
+
+    private async Task EditPermission(Permission permission)
+    {
+        var result = await DialogService.OpenAsync<PermissionForm>("Edit Permission", new Dictionary<string, object> { { "Permission", permission } }, new DialogOptions { Width = "500px" });
+        
+        if (result == true)
+        {
+            await LoadPermissions();
+        }
+    }
+
+    private async Task DeletePermission(Permission permission)
+    {
+        var result = await DialogService.Confirm($"Are you sure you want to delete permission '{permission.permissionName}'?", "Delete Permission", new ConfirmOptions { OkButtonText = "Yes", CancelButtonText = "No" });
+        
+        if (result == true)
+        {
+            loading = true;
+            try
+            {
+                var response = await PermissionApi.DeletePermission(permission.permissionId);
+                if (response.IsSuccessful)
+                {
+                    NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Success, Summary = "Success", Detail = "Permission deleted successfully" });
+                    await LoadPermissions();
+                }
+                else
+                {
+                    NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Error, Summary = "Error", Detail = "Failed to delete permission" });
+                }
+            }
+            catch (Exception ex)
+            {
+                NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Error, Summary = "Error", Detail = ex.Message });
+            }
+            finally
+            {
+                loading = false;
+            }
+        }
+    }
+}
+
